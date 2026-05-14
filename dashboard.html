@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Probabilistic Forecasting Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1219;
+    --surface2: #131a24;
+    --surface3: #1a2332;
+    --border: rgba(99,179,237,0.10);
+    --border2: rgba(99,179,237,0.18);
+    --text: #e2e8f0;
+    --muted: #718096;
+    --dim: #4a5568;
+    --accent: #4fc3f7;
+    --accent2: #81d4fa;
+    --teal: #4dd0e1;
+    --green: #66bb6a;
+    --amber: #ffa726;
+    --red: #ef5350;
+    --purple: #ab47bc;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Scan-line texture ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Layout ── */
+  .shell {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: 52px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  .logo-mark {
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .logo-mark::before {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  .logo-pulse {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(0.8); opacity: 0.8; }
+    50% { transform: scale(1.3); opacity: 0.2; }
+  }
+
+  .header-title { color: var(--accent); }
+  .header-sub { color: var(--muted); font-size: 12px; }
+
+  .header-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .header-time {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+  }
+
+  /* ── Sidebar ── */
+  nav {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-section {
+    padding: 6px 16px 2px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+    position: relative;
+  }
+
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active {
+    color: var(--accent);
+    background: rgba(79,195,247,0.06);
+    border-left-color: var(--accent);
+  }
+
+  .nav-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .nav-badge {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    background: rgba(79,195,247,0.12);
+    color: var(--accent);
+  }
+
+  /* ── Main ── */
+  main {
+    background: var(--bg);
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Page title ── */
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+
+  .page-subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 3px;
+    font-family: var(--mono);
+  }
+
+  .horizon-controls {
+    display: flex;
+    gap: 6px;
+  }
+
+  .ctrl-btn {
+    padding: 6px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+
+  .ctrl-btn:hover { border-color: var(--border2); color: var(--text); }
+  .ctrl-btn.active {
+    background: rgba(79,195,247,0.10);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── KPI Row ── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    cursor: default;
+    transition: border-color 0.2s;
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: var(--accent-color, var(--accent));
+    opacity: 0.6;
+  }
+
+  .kpi-card:hover { border-color: var(--border2); }
+
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .kpi-value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--accent-color, var(--accent));
+    margin: 6px 0 2px;
+    letter-spacing: -0.03em;
+  }
+
+  .kpi-delta {
+    font-family: var(--mono);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .delta-up { color: var(--green); }
+  .delta-down { color: var(--red); }
+  .delta-neutral { color: var(--muted); }
+
+  .kpi-tag {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+
+  /* ── Main chart grid ── */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 16px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  .chart-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .legend-line {
+    width: 20px;
+    height: 2px;
+    border-radius: 1px;
+  }
+
+  .legend-band {
+    width: 20px;
+    height: 10px;
+    border-radius: 2px;
+  }
+
+  canvas { width: 100% !important; }
+
+  /* ── Bottom grid ── */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+
+  /* ── Reliability diagram ── */
+  .rel-canvas-wrap { position: relative; height: 200px; }
+
+  /* ── Horizon table ── */
+  .metric-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .metric-table th {
+    color: var(--dim);
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+  }
+
+  .metric-table th:first-child { text-align: left; }
+
+  .metric-table td {
+    padding: 8px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    text-align: right;
+    color: var(--muted);
+  }
+
+  .metric-table td:first-child {
+    text-align: left;
+    color: var(--accent);
+  }
+
+  .metric-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .bar-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .mini-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+    min-width: 4px;
+  }
+
+  /* ── Coverage drift ── */
+  .coverage-wrap { position: relative; height: 130px; }
+
+  /* ── Model breakdown ── */
+  .model-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .model-item:last-child { border: none; }
+
+  .model-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--accent);
+    flex-shrink: 0;
+    letter-spacing: 0.02em;
+  }
+
+  .model-name { font-size: 13px; color: var(--text); }
+  .model-desc { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+  .model-contrib {
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .model-pct {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .model-contrib-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--dim);
+  }
+
+  .model-bar-track {
+    height: 2px;
+    background: var(--surface3);
+    border-radius: 1px;
+    margin-top: 8px;
+  }
+
+  .model-bar-fill {
+    height: 100%;
+    border-radius: 1px;
+    background: var(--accent);
+    transition: width 1s ease;
+  }
+
+  /* ── Conformal gotcha callout ── */
+  .gotcha {
+    background: rgba(239,83,80,0.05);
+    border: 1px solid rgba(239,83,80,0.25);
+    padding: 14px 16px;
+    border-left: 3px solid var(--red);
+    font-size: 12px;
+    color: #ccc;
+    line-height: 1.7;
+  }
+
+  .gotcha-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--red);
+    font-weight: 500;
+    margin-bottom: 6px;
+    letter-spacing: 0.04em;
+  }
+
+  .gotcha code {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: rgba(239,83,80,0.12);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #ff8a80;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-pulse"></div>
+      </div>
+      <div>
+        <div class="header-title">PROB·FORECAST</div>
+        <div class="header-sub">Uncertainty Quantification Engine v1.0</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-dot"></div>
+      API LIVE · port 8000
+    </div>
+    <div class="header-time" id="clock">—</div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <nav>
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--accent)"></div>
+      Forecast Monitor
+      <span class="nav-badge">live</span>
+    </div>
+    <div class="nav-item" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--teal)"></div>
+      Calibration
+    </div>
+    <div class="nav-item" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--purple)"></div>
+      Reliability Diagram
+    </div>
+
+    <div class="nav-section">Models</div>
+    <div class="nav-item" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--amber)"></div>
+      NeuralProphet
+    </div>
+    <div class="nav-item" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--green)"></div>
+      LSTM · MC Dropout
+    </div>
+    <div class="nav-item" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--accent)"></div>
+      LightGBM Quantile
+    </div>
+
+    <div class="nav-section">Config</div>
+    <div class="nav-item" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--dim)"></div>
+      EnbPI Settings
+    </div>
+    <div class="nav-item" onclick="setActive(this)">
+      <div class="nav-dot" style="background:var(--dim)"></div>
+      API Endpoint
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <div class="page-title">Forecast Monitor</div>
+        <div class="page-subtitle">// PJM East Hourly Energy Load · conformal=EnbPI · α=0.10</div>
+      </div>
+      <div class="horizon-controls">
+        <button class="ctrl-btn active" onclick="setHorizon(this,'1h')">1H</button>
+        <button class="ctrl-btn" onclick="setHorizon(this,'6h')">6H</button>
+        <button class="ctrl-btn" onclick="setHorizon(this,'24h')">24H</button>
+        <button class="ctrl-btn" onclick="setHorizon(this,'7d')">7D</button>
+      </div>
+    </div>
+
+    <!-- KPI row -->
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">Coverage @ 80%</div>
+        <div class="kpi-value">83.1%</div>
+        <div class="kpi-delta delta-up">▲ +3.1 pp vs nominal</div>
+        <div class="kpi-tag" style="background:rgba(102,187,106,0.12);color:var(--green)">VALID</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">Coverage @ 95%</div>
+        <div class="kpi-value">94.8%</div>
+        <div class="kpi-delta delta-neutral">▼ −0.2 pp vs nominal</div>
+        <div class="kpi-tag" style="background:rgba(77,208,225,0.12);color:var(--teal)">VALID</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">Winkler Score</div>
+        <div class="kpi-value">142.3</div>
+        <div class="kpi-delta delta-neutral">24h horizon · lower=better</div>
+        <div class="kpi-tag" style="background:rgba(255,167,38,0.12);color:var(--amber)">PRIMARY</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">RMSE (point)</div>
+        <div class="kpi-value">1,847</div>
+        <div class="kpi-delta delta-up">▲ −23% vs baseline</div>
+        <div class="kpi-tag" style="background:rgba(79,195,247,0.12);color:var(--accent)">MW</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">ECE (calibration)</div>
+        <div class="kpi-value">0.031</div>
+        <div class="kpi-delta delta-up">▲ near-perfect</div>
+        <div class="kpi-tag" style="background:rgba(171,71,188,0.12);color:var(--purple)">SHARP</div>
+      </div>
+    </div>
+
+    <!-- Main chart + model sidebar -->
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">PROBABILISTIC FORECAST · 80% + 95% INTERVALS</div>
+            <div class="chart-meta">EnbPI rolling calibration · q̂₈₀=1,521 MW · q̂₉₅=2,847 MW</div>
+          </div>
+          <div class="legend">
+            <div class="legend-item">
+              <div class="legend-line" style="background:var(--text)"></div> Actuals
+            </div>
+            <div class="legend-item">
+              <div class="legend-line" style="background:var(--accent)"></div> Point forecast
+            </div>
+            <div class="legend-item">
+              <div class="legend-band" style="background:rgba(79,195,247,0.20)"></div> 80% CI
+            </div>
+            <div class="legend-item">
+              <div class="legend-band" style="background:rgba(79,195,247,0.08)"></div> 95% CI
+            </div>
+          </div>
+        </div>
+        <div style="height:260px">
+          <canvas id="forecastChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">MODEL ENSEMBLE</div>
+          <div class="chart-meta">stacking meta-learner</div>
+        </div>
+        <div class="model-item">
+          <div class="model-icon">NP</div>
+          <div>
+            <div class="model-name">NeuralProphet</div>
+            <div class="model-desc">trend · seasonality · lags</div>
+            <div class="model-bar-track" style="width:140px">
+              <div class="model-bar-fill" style="width:35%;background:var(--amber)"></div>
+            </div>
+          </div>
+          <div class="model-contrib">
+            <div class="model-pct" style="color:var(--amber)">35%</div>
+            <div class="model-contrib-label">weight</div>
+          </div>
+        </div>
+        <div class="model-item">
+          <div class="model-icon">LSTM</div>
+          <div>
+            <div class="model-name">LSTM · MC Dropout</div>
+            <div class="model-desc">nonlinear · uncertainty</div>
+            <div class="model-bar-track" style="width:140px">
+              <div class="model-bar-fill" style="width:28%;background:var(--green)"></div>
+            </div>
+          </div>
+          <div class="model-contrib">
+            <div class="model-pct" style="color:var(--green)">28%</div>
+            <div class="model-contrib-label">weight</div>
+          </div>
+        </div>
+        <div class="model-item">
+          <div class="model-icon">LGBM</div>
+          <div>
+            <div class="model-name">LightGBM Quantile</div>
+            <div class="model-desc">q10/q50/q90 · lag features</div>
+            <div class="model-bar-track" style="width:140px">
+              <div class="model-bar-fill" style="width:37%;background:var(--accent)"></div>
+            </div>
+          </div>
+          <div class="model-contrib">
+            <div class="model-pct" style="color:var(--accent)">37%</div>
+            <div class="model-contrib-label">weight</div>
+          </div>
+        </div>
+
+        <div class="gotcha" style="margin-top:8px">
+          <div class="gotcha-title">⚠ CONFORMAL VALIDITY NOTE</div>
+          Time series violates exchangeability. Using <code>EnbPI</code> (online conformal) 
+          not split conformal. Rolling window = 720h.
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom row -->
+    <div class="bottom-grid">
+
+      <!-- Reliability diagram -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">RELIABILITY DIAGRAM</div>
+          <div class="chart-meta">ECE = 0.031</div>
+        </div>
+        <div class="rel-canvas-wrap">
+          <canvas id="relChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Horizon table -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">METRICS BY HORIZON</div>
+          <div class="chart-meta">80% intervals</div>
+        </div>
+        <table class="metric-table">
+          <thead>
+            <tr>
+              <th>Horizon</th>
+              <th>PICP</th>
+              <th>Winkler</th>
+              <th>Width</th>
+            </tr>
+          </thead>
+          <tbody id="horizonTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Coverage drift -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">COVERAGE DRIFT · 30d</div>
+          <div class="chart-meta">rolling 24h window</div>
+        </div>
+        <div class="coverage-wrap">
+          <canvas id="driftChart"></canvas>
+        </div>
+        <div style="margin-top:12px">
+          <div class="gotcha" style="border-left-color:var(--amber); background:rgba(255,167,38,0.04); border-color:rgba(255,167,38,0.2)">
+            <div class="gotcha-title" style="color:var(--amber)">⚠ WINKLER HORIZON DEPENDENCE</div>
+            Winkler scores grow with horizon — never compare raw across horizons. 
+            Always stratify. <code>h=1h: 89.2</code> vs <code>h=24h: 142.3</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── Clock ──────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toUTCString().replace('GMT','UTC').slice(0,-4);
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── Nav ─────────────────────────────────────────────────────────────────────
+function setActive(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function setHorizon(el, h) {
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ── Data generation ──────────────────────────────────────────────────────────
+function generateForecastData(n = 72) {
+  const seed = 42;
+  let rng = seed;
+  const rand = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return (rng >>> 0) / 0xffffffff; };
+  const randn = () => Math.sqrt(-2*Math.log(rand()+1e-10)) * Math.cos(2*Math.PI*rand());
+
+  const labels = [], actuals = [], preds = [], lower80 = [], upper80 = [], lower95 = [], upper95 = [];
+
+  const now = new Date();
+  const baseLoad = 28000;
+
+  for (let i = 0; i < n; i++) {
+    const t = new Date(now.getTime() - (n - i) * 3600000);
+    const h = t.getHours();
+    const daily = 2200 * Math.sin(2*Math.PI*(h-6)/24) + 1100 * Math.sin(2*Math.PI*(h-18)/24);
+    const noise = randn() * 400;
+    const actual = baseLoad + daily + noise;
+    const pred = baseLoad + daily + randn() * 200;
+
+    // Intervals widen toward present
+    const future = Math.max(0, i - n * 0.85);
+    const w80 = 1400 + future * 60 + rand() * 200;
+    const w95 = 2600 + future * 100 + rand() * 300;
+
+    labels.push(t.getHours().toString().padStart(2,'0') + ':00');
+    actuals.push(Math.round(actual));
+    preds.push(Math.round(pred));
+    lower80.push(Math.round(pred - w80/2));
+    upper80.push(Math.round(pred + w80/2));
+    lower95.push(Math.round(pred - w95/2));
+    upper95.push(Math.round(pred + w95/2));
+  }
+  return { labels, actuals, preds, lower80, upper80, lower95, upper95 };
+}
+
+// ── Main Forecast Chart ───────────────────────────────────────────────────────
+const fd = generateForecastData(72);
+
+Chart.defaults.color = '#718096';
+Chart.defaults.borderColor = 'rgba(99,179,237,0.08)';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 10;
+
+const forecastCtx = document.getElementById('forecastChart').getContext('2d');
+new Chart(forecastCtx, {
+  type: 'line',
+  data: {
+    labels: fd.labels,
+    datasets: [
+      {
+        label: '95% CI upper',
+        data: fd.upper95,
+        fill: '+1',
+        backgroundColor: 'rgba(79,195,247,0.06)',
+        borderWidth: 0,
+        pointRadius: 0,
+        tension: 0.3,
+      },
+      {
+        label: '95% CI lower',
+        data: fd.lower95,
+        fill: false,
+        borderWidth: 0,
+        pointRadius: 0,
+        tension: 0.3,
+      },
+      {
+        label: '80% CI upper',
+        data: fd.upper80,
+        fill: '+1',
+        backgroundColor: 'rgba(79,195,247,0.15)',
+        borderWidth: 0,
+        pointRadius: 0,
+        tension: 0.3,
+      },
+      {
+        label: '80% CI lower',
+        data: fd.lower80,
+        fill: false,
+        borderWidth: 0,
+        pointRadius: 0,
+        tension: 0.3,
+      },
+      {
+        label: 'Point Forecast',
+        data: fd.preds,
+        borderColor: '#4fc3f7',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: false,
+      },
+      {
+        label: 'Actuals',
+        data: fd.actuals,
+        borderColor: 'rgba(226,232,240,0.8)',
+        borderWidth: 1,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: false,
+        borderDash: [3, 3],
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0d1219',
+        borderColor: 'rgba(79,195,247,0.3)',
+        borderWidth: 1,
+        titleColor: '#4fc3f7',
+        bodyColor: '#718096',
+        callbacks: {
+          label: ctx => {
+            const v = Math.round(ctx.parsed.y).toLocaleString();
+            return ` ${ctx.dataset.label}: ${v} MW`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(99,179,237,0.05)' },
+        ticks: { maxTicksLimit: 12 },
+      },
+      y: {
+        grid: { color: 'rgba(99,179,237,0.05)' },
+        ticks: {
+          callback: v => (v/1000).toFixed(0) + 'k',
+        },
+      },
+    },
+  },
+});
+
+// ── Reliability Diagram ───────────────────────────────────────────────────────
+const nominalQ = [0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.80,0.90,0.95];
+const empiricalQ = [0.057,0.108,0.198,0.295,0.391,0.488,0.591,0.698,0.831,0.893,0.948];
+
+const relCtx = document.getElementById('relChart').getContext('2d');
+new Chart(relCtx, {
+  type: 'scatter',
+  data: {
+    datasets: [
+      {
+        label: 'Perfect calibration',
+        data: nominalQ.map(q => ({ x: q, y: q })),
+        type: 'line',
+        borderColor: 'rgba(255,255,255,0.15)',
+        borderWidth: 1,
+        borderDash: [4, 4],
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+      },
+      {
+        label: 'Model calibration',
+        data: nominalQ.map((q, i) => ({ x: q, y: empiricalQ[i] })),
+        type: 'line',
+        borderColor: '#4fc3f7',
+        borderWidth: 1.5,
+        backgroundColor: '#4fc3f7',
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        fill: false,
+        tension: 0.2,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0d1219',
+        borderColor: 'rgba(79,195,247,0.3)',
+        borderWidth: 1,
+        titleColor: '#4fc3f7',
+        bodyColor: '#718096',
+        callbacks: {
+          label: ctx => ` nominal: ${(ctx.parsed.x*100).toFixed(0)}% · empirical: ${(ctx.parsed.y*100).toFixed(1)}%`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        title: { display: true, text: 'nominal', color: '#4a5568', font: { size: 9 } },
+        grid: { color: 'rgba(99,179,237,0.05)' },
+        min: 0, max: 1,
+        ticks: { callback: v => (v*100).toFixed(0)+'%' },
+      },
+      y: {
+        title: { display: true, text: 'empirical', color: '#4a5568', font: { size: 9 } },
+        grid: { color: 'rgba(99,179,237,0.05)' },
+        min: 0, max: 1,
+        ticks: { callback: v => (v*100).toFixed(0)+'%' },
+      },
+    },
+  },
+});
+
+// ── Horizon Table ─────────────────────────────────────────────────────────────
+const horizonData = [
+  { h: 'h=1h',   picp: 0.852, winkler: 89.2,  width: 1124 },
+  { h: 'h=6h',   picp: 0.841, winkler: 108.7, width: 1389 },
+  { h: 'h=24h',  picp: 0.831, winkler: 142.3, width: 1847 },
+  { h: 'h=168h', picp: 0.804, winkler: 219.4, width: 2931 },
+];
+
+const maxWinkler = Math.max(...horizonData.map(r => r.winkler));
+const tbody = document.getElementById('horizonTableBody');
+horizonData.forEach(row => {
+  const barW = Math.round((row.winkler / maxWinkler) * 60);
+  const picpColor = row.picp >= 0.80 ? 'var(--green)' : 'var(--red)';
+  tbody.innerHTML += `
+    <tr>
+      <td>${row.h}</td>
+      <td style="color:${picpColor}">${(row.picp*100).toFixed(1)}%</td>
+      <td>
+        <div class="bar-cell">
+          <div class="mini-bar" style="width:${barW}px;background:var(--amber)"></div>
+          ${row.winkler.toFixed(1)}
+        </div>
+      </td>
+      <td>${row.width.toLocaleString()}</td>
+    </tr>`;
+});
+
+// ── Coverage Drift Chart ──────────────────────────────────────────────────────
+const driftLabels = Array.from({length: 30}, (_, i) => `D-${29-i}`);
+const drift80 = Array.from({length: 30}, () => 0.78 + Math.random() * 0.09);
+const drift95 = Array.from({length: 30}, () => 0.91 + Math.random() * 0.07);
+
+const driftCtx = document.getElementById('driftChart').getContext('2d');
+new Chart(driftCtx, {
+  type: 'line',
+  data: {
+    labels: driftLabels,
+    datasets: [
+      {
+        label: '95% coverage',
+        data: drift95,
+        borderColor: 'rgba(77,208,225,0.7)',
+        borderWidth: 1.2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.4,
+      },
+      {
+        label: '80% coverage',
+        data: drift80,
+        borderColor: 'rgba(79,195,247,0.7)',
+        borderWidth: 1.2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.4,
+      },
+      {
+        label: '95% target',
+        data: Array(30).fill(0.95),
+        borderColor: 'rgba(77,208,225,0.25)',
+        borderWidth: 1,
+        borderDash: [3,3],
+        pointRadius: 0,
+        fill: false,
+      },
+      {
+        label: '80% target',
+        data: Array(30).fill(0.80),
+        borderColor: 'rgba(79,195,247,0.25)',
+        borderWidth: 1,
+        borderDash: [3,3],
+        pointRadius: 0,
+        fill: false,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { maxTicksLimit: 6, font: { size: 9 } },
+      },
+      y: {
+        grid: { color: 'rgba(99,179,237,0.05)' },
+        min: 0.6, max: 1.05,
+        ticks: { callback: v => (v*100).toFixed(0)+'%', font: { size: 9 } },
+      },
+    },
+  },
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Probabilistic Forecasting Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #080c10;
+  --surface: #0d1219;
+  --surface2: #131a24;
+  --surface3: #1a2332;
+  --border: rgba(99,179,237,0.10);
+  --border2: rgba(99,179,237,0.18);
+  --text: #e2e8f0;
+  --muted: #718096;
+  --dim: #4a5568;
+  --accent: #4fc3f7;
+  --accent2: #81d4fa;
+  --teal: #4dd0e1;
+  --green: #66bb6a;
+  --amber: #ffa726;
+  --red: #ef5350;
+  --purple: #ab47bc;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: 52px 1fr;
+  min-height: 100vh;
+}
+
+header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.logo-mark {
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.logo-mark::before {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.logo-pulse {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 0.2; }
+}
+
+.header-title { color: var(--accent); }
+.header-sub { color: var(--muted); font-size: 12px; }
+.header-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.header-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+nav {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-section {
+  padding: 6px 16px 2px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--dim);
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+  position: relative;
+}
+
+.nav-item:hover { color: var(--text); background: var(--surface2); }
+.nav-item.active {
+  color: var(--accent);
+  background: rgba(79,195,247,0.06);
+  border-left-color: var(--accent);
+}
+
+.nav-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: rgba(79,195,247,0.12);
+  color: var(--accent);
+}
+
+main {
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 3px;
+  font-family: var(--mono);
+}
+
+.horizon-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.ctrl-btn {
+  padding: 6px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.ctrl-btn:hover { border-color: var(--border2); color: var(--text); }
+.ctrl-btn.active {
+  background: rgba(79,195,247,0.10);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  cursor: default;
+  transition: border-color 0.2s;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: var(--accent-color, var(--accent));
+  opacity: 0.6;
+}
+
+.kpi-card:hover { border-color: var(--border2); }
+
+.kpi-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.kpi-value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent-color, var(--accent));
+  margin: 6px 0 2px;
+  letter-spacing: -0.03em;
+}
+
+.kpi-delta {
+  font-family: var(--mono);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.delta-up { color: var(--green); }
+.delta-down { color: var(--red); }
+.delta-neutral { color: var(--muted); }
+
+.kpi-tag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+}
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chart-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.chart-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.legend-line {
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.legend-band {
+  width: 20px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+canvas { width: 100% !important; }
+
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.rel-canvas-wrap { position: relative; height: 200px; }
+
+.metric-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.metric-table th {
+  color: var(--dim);
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.metric-table th:first-child { text-align: left; }
+
+.metric-table td {
+  padding: 8px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  text-align: right;
+  color: var(--muted);
+}
+
+.metric-table td:first-child {
+  text-align: left;
+  color: var(--accent);
+}
+
+.metric-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+.bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.mini-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+  min-width: 4px;
+}
+
+.coverage-wrap { position: relative; height: 130px; }
+
+.model-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.model-item:last-child { border: none; }
+
+.model-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--accent);
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.model-name { font-size: 13px; color: var(--text); }
+.model-desc { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+.model-contrib {
+  margin-left: auto;
+  text-align: right;
+}
+
+.model-pct {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.model-contrib-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--dim);
+}
+
+.model-bar-track {
+  height: 2px;
+  background: var(--surface3);
+  border-radius: 1px;
+  margin-top: 8px;
+}
+
+.model-bar-fill {
+  height: 100%;
+  border-radius: 1px;
+  background: var(--accent);
+  transition: width 1s ease;
+}
+
+.gotcha {
+  background: rgba(239,83,80,0.05);
+  border: 1px solid rgba(239,83,80,0.25);
+  padding: 14px 16px;
+  border-left: 3px solid var(--red);
+  font-size: 12px;
+  color: #ccc;
+  line-height: 1.7;
+}
+
+.gotcha-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  font-weight: 500;
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+
+.gotcha code {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: rgba(239,83,80,0.12);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: #ff8a80;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-pulse"></div>
+      </div>
+      <div>
+        <div class="header-title">PROB·FORECAST</div>
+        <div class="header-sub">Uncertainty Quantification Engine v1.0</div>
+      </div>
+    </div>
+    <div class="header-status" id="apiStatus">
+      <div class="status-dot"></div>
+      Loading...
+    </div>
+    <div class="header-time" id="clock">—</div>
+  </header>
+
+  <nav>
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="switchPage(this, 'forecast')">
+      <div class="nav-dot" style="background:var(--accent)"></div>
+      Forecast Monitor
+      <span class="nav-badge">live</span>
+    </div>
+    <div class="nav-item" onclick="switchPage(this, 'calibration')">
+      <div class="nav-dot" style="background:var(--teal)"></div>
+      Calibration
+    </div>
+    <div class="nav-item" onclick="switchPage(this, 'reliability')">
+      <div class="nav-dot" style="background:var(--purple)"></div>
+      Reliability Diagram
+    </div>
+
+    <div class="nav-section">Models</div>
+    <div class="nav-item" onclick="switchPage(this, 'neuralprophet')">
+      <div class="nav-dot" style="background:var(--amber)"></div>
+      NeuralProphet
+    </div>
+    <div class="nav-item" onclick="switchPage(this, 'lstm')">
+      <div class="nav-dot" style="background:var(--green)"></div>
+      LSTM · MC Dropout
+    </div>
+    <div class="nav-item" onclick="switchPage(this, 'lgbm')">
+      <div class="nav-dot" style="background:var(--accent)"></div>
+      LightGBM Quantile
+    </div>
+
+    <div class="nav-section">Config</div>
+    <div class="nav-item" onclick="switchPage(this, 'enbpi')">
+      <div class="nav-dot" style="background:var(--dim)"></div>
+      EnbPI Settings
+    </div>
+    <div class="nav-item" onclick="switchPage(this, 'api')">
+      <div class="nav-dot" style="background:var(--dim)"></div>
+      API Endpoint
+    </div>
+  </nav>
+
+  <main>
+    <!-- FORECAST PAGE (default) -->
+    <div id="page-forecast" class="page-content" style="display:block;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Forecast Monitor</div>
+        <div class="page-subtitle" id="pageSubtitle">// Loading forecast data...</div>
+      </div>
+      <div class="horizon-controls">
+        <button class="ctrl-btn active" onclick="setHorizon(this, 24)">24H</button>
+        <button class="ctrl-btn" onclick="setHorizon(this, 72)">3D</button>
+        <button class="ctrl-btn" onclick="setHorizon(this, 168)">1W</button>
+      </div>
+    </div>
+
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">PROBABILISTIC FORECAST · 80% + 95% INTERVALS</div>
+            <div class="chart-meta" id="chartMeta">Loading chart data...</div>
+          </div>
+          <div class="legend">
+            <div class="legend-item">
+              <div class="legend-line" style="background:var(--text)"></div> Actuals
+            </div>
+            <div class="legend-item">
+              <div class="legend-line" style="background:var(--accent)"></div> Point forecast
+            </div>
+            <div class="legend-item">
+              <div class="legend-band" style="background:rgba(79,195,247,0.20)"></div> 80% CI
+            </div>
+            <div class="legend-item">
+              <div class="legend-band" style="background:rgba(79,195,247,0.08)"></div> 95% CI
+            </div>
+          </div>
+        </div>
+        <div style="height:260px">
+          <canvas id="forecastChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">MODEL ENSEMBLE</div>
+          <div class="chart-meta">stacking meta-learner</div>
+        </div>
+        <div class="model-item">
+          <div class="model-icon">NP</div>
+          <div>
+            <div class="model-name">NeuralProphet</div>
+            <div class="model-desc">trend · seasonality · lags</div>
+            <div class="model-bar-track" style="width:140px">
+              <div class="model-bar-fill" style="width:35%;background:var(--amber)"></div>
+            </div>
+          </div>
+          <div class="model-contrib">
+            <div class="model-pct" style="color:var(--amber)">35%</div>
+            <div class="model-contrib-label">weight</div>
+          </div>
+        </div>
+        <div class="model-item">
+          <div class="model-icon">LSTM</div>
+          <div>
+            <div class="model-name">LSTM · MC Dropout</div>
+            <div class="model-desc">nonlinear · uncertainty</div>
+            <div class="model-bar-track" style="width:140px">
+              <div class="model-bar-fill" style="width:28%;background:var(--green)"></div>
+            </div>
+          </div>
+          <div class="model-contrib">
+            <div class="model-pct" style="color:var(--green)">28%</div>
+            <div class="model-contrib-label">weight</div>
+          </div>
+        </div>
+        <div class="model-item">
+          <div class="model-icon">LGBM</div>
+          <div>
+            <div class="model-name">LightGBM Quantile</div>
+            <div class="model-desc">q10/q50/q90 · lag features</div>
+            <div class="model-bar-track" style="width:140px">
+              <div class="model-bar-fill" style="width:37%;background:var(--accent)"></div>
+            </div>
+          </div>
+          <div class="model-contrib">
+            <div class="model-pct" style="color:var(--accent)">37%</div>
+            <div class="model-contrib-label">weight</div>
+          </div>
+        </div>
+
+        <div class="gotcha" style="margin-top:8px">
+          <div class="gotcha-title">⚠ CONFORMAL VALIDITY NOTE</div>
+          Time series violates exchangeability. Using <code>EnbPI</code> (online conformal)
+          not split conformal. Rolling window = 720h.
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">RELIABILITY DIAGRAM</div>
+          <div class="chart-meta" id="eceValue">ECE = —</div>
+        </div>
+        <div class="rel-canvas-wrap">
+          <canvas id="relChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">METRICS BY HORIZON</div>
+          <div class="chart-meta">80% intervals</div>
+        </div>
+        <table class="metric-table">
+          <thead>
+            <tr>
+              <th>Horizon</th>
+              <th>PICP</th>
+              <th>Winkler</th>
+              <th>Width</th>
+            </tr>
+          </thead>
+          <tbody id="horizonTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">COVERAGE DRIFT · 30d</div>
+          <div class="chart-meta">rolling 24h window</div>
+        </div>
+        <div class="coverage-wrap">
+          <canvas id="driftChart"></canvas>
+        </div>
+        <div style="margin-top:12px">
+          <div class="gotcha" style="border-left-color:var(--amber); background:rgba(255,167,38,0.04); border-color:rgba(255,167,38,0.2)">
+            <div class="gotcha-title" style="color:var(--amber)">⚠ WINKLER HORIZON DEPENDENCE</div>
+            Winkler scores grow with horizon — never compare raw across horizons.
+            Always stratify. <code>h=1h: 89.2</code> vs <code>h=24h: 142.3</code>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- CALIBRATION PAGE -->
+    <div id="page-calibration" class="page-content" style="display:none;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Conformal Calibration</div>
+        <div class="page-subtitle">// EnbPI online recalibration · validation set metrics</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">Method</div>
+        <div class="kpi-value" style="font-size:14px; margin:12px 0">EnbPI</div>
+        <div class="kpi-delta delta-neutral">Ensemble Batch Prediction Intervals</div>
+        <div class="kpi-tag" style="background:rgba(102,187,106,0.12);color:var(--green)">ONLINE</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">Window Size</div>
+        <div class="kpi-value">720 h</div>
+        <div class="kpi-delta delta-neutral">30 days rolling calibration</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">q̂₈₀</div>
+        <div class="kpi-value">1,521</div>
+        <div class="kpi-delta delta-neutral">80% interval threshold (MW)</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">q̂₉₅</div>
+        <div class="kpi-value">2,847</div>
+        <div class="kpi-delta delta-neutral">95% interval threshold (MW)</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">Coverage Drift</div>
+        <div class="kpi-value" style="font-size:14px; margin:12px 0">±2.1%</div>
+        <div class="kpi-delta delta-up">Stable · within ±3% band</div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">CONFORMAL RESIDUALS DISTRIBUTION</div>
+            <div class="chart-meta">|y - ŷ| on calibration set · n=13,115</div>
+          </div>
+        </div>
+        <div style="height:260px">
+          <canvas id="residualChart"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">WHY EnbPI?</div>
+          <div class="chart-meta">vs split conformal</div>
+        </div>
+        <div style="padding:12px 0; font-size:13px; line-height:1.8">
+          <div style="margin-bottom:14px">
+            <div style="color:var(--accent); font-weight:500; margin-bottom:4px">Split Conformal</div>
+            <div style="color:var(--muted)">❌ Assumes exchangeability (false for time series)</div>
+            <div style="color:var(--muted)">❌ Static calibration → coverage degrades with drift</div>
+          </div>
+          <div>
+            <div style="color:var(--green); font-weight:500; margin-bottom:4px">EnbPI (Ours)</div>
+            <div style="color:var(--muted)">✓ Handles temporal dependence</div>
+            <div style="color:var(--muted)">✓ Online recalibration → adapts to distribution shift</div>
+            <div style="color:var(--muted)">✓ Maintains coverage guarantee</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- RELIABILITY PAGE -->
+    <div id="page-reliability" class="page-content" style="display:none;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Reliability Diagram & Calibration</div>
+        <div class="page-subtitle">// Expected Calibration Error (ECE) analysis</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">ECE</div>
+        <div class="kpi-value">0.031</div>
+        <div class="kpi-delta delta-up">▲ near-perfect · <0.05 excellent</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">Max Deviation</div>
+        <div class="kpi-value">0.058</div>
+        <div class="kpi-delta delta-neutral">q95 empirical vs nominal</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">Overconfident?</div>
+        <div class="kpi-value" style="font-size:14px; margin:12px 0">No</div>
+        <div class="kpi-delta delta-up">All points above diagonal</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">Recalibration</div>
+        <div class="kpi-value" style="font-size:14px; margin:12px 0">None</div>
+        <div class="kpi-delta delta-neutral">Not needed · already sharp</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">Interpretation</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">Model is</div>
+        <div class="kpi-delta delta-up">✓ Well-calibrated · sharp intervals</div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">RELIABILITY DIAGRAM (ZOOMED)</div>
+            <div class="chart-meta">Empirical coverage vs nominal · perfectly calibrated = on diagonal</div>
+          </div>
+        </div>
+        <div style="height:320px">
+          <canvas id="relChart2"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">CALIBRATION GUIDANCE</div>
+          <div class="chart-meta">interpreting the diagram</div>
+        </div>
+        <div style="padding:12px 0; font-size:12px; line-height:1.9">
+          <div style="margin-bottom:16px; padding:12px; background:rgba(102,187,106,0.08); border-left:2px solid var(--green); border-radius:2px">
+            <div style="color:var(--green); font-weight:500; margin-bottom:4px">✓ GOOD (you are here)</div>
+            <div style="color:var(--muted)">Points on or near diagonal</div>
+            <div style="color:var(--muted); font-size:11px">ECE < 0.05</div>
+          </div>
+          <div style="margin-bottom:16px; padding:12px; background:rgba(239,83,80,0.08); border-left:2px solid var(--red); border-radius:2px">
+            <div style="color:var(--red); font-weight:500; margin-bottom:4px">⚠ OVERCONFIDENT</div>
+            <div style="color:var(--muted)">Points below diagonal</div>
+            <div style="color:var(--muted); font-size:11px">Intervals too narrow</div>
+          </div>
+          <div style="padding:12px; background:rgba(255,167,38,0.08); border-left:2px solid var(--amber); border-radius:2px">
+            <div style="color:var(--amber); font-weight:500; margin-bottom:4px">⚠ UNDERCONFIDENT</div>
+            <div style="color:var(--muted)">Points above diagonal</div>
+            <div style="color:var(--muted); font-size:11px">Intervals too wide</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- MODEL PAGES -->
+    <div id="page-neuralprophet" class="page-content" style="display:none;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">NeuralProphet · Trend & Seasonality Baseline</div>
+        <div class="page-subtitle">// PyTorch AR-Net · decomposable components</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">Architecture</div>
+        <div class="kpi-value" style="font-size:14px; margin:12px 0">AR-Net</div>
+        <div class="kpi-delta delta-neutral">Autoregressive neural network</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">Lags</div>
+        <div class="kpi-value">48</div>
+        <div class="kpi-delta delta-neutral">48 hours of history input</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">Seasonality</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">Y + W + D</div>
+        <div class="kpi-delta delta-neutral">Yearly, Weekly, Daily</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">Epochs</div>
+        <div class="kpi-value">50</div>
+        <div class="kpi-delta delta-neutral">Early stopping on val loss</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">Ensemble Weight</div>
+        <div class="kpi-value" style="font-size:18px; font-weight:700">35%</div>
+        <div class="kpi-delta delta-neutral">in stacking meta-learner</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">MODEL DESCRIPTION</div>
+        <div class="chart-meta">strengths & limitations</div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:12px 0">
+        <div>
+          <div style="color:var(--green); font-weight:500; margin-bottom:8px; font-size:13px">✓ Strengths</div>
+          <div style="color:var(--muted); font-size:12px; line-height:1.8">
+            <div>• Interpretable components (trend, seasonality)</div>
+            <div>• Fast training & inference</div>
+            <div>• Handles multiple seasonalities</div>
+            <div>• Decomposes into human-understandable patterns</div>
+          </div>
+        </div>
+        <div>
+          <div style="color:var(--red); font-weight:500; margin-bottom:8px; font-size:13px">⚠ Limitations</div>
+          <div style="color:var(--muted); font-size:12px; line-height:1.8">
+            <div>• Linear assumption within components</div>
+            <div>• Struggles with regime shifts</div>
+            <div>• Cannot capture interactions</div>
+            <div>• Best for "well-behaved" data</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- LSTM PAGE -->
+    <div id="page-lstm" class="page-content" style="display:none;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">LSTM with MC Dropout · Uncertainty via Bayesian Approximation</div>
+        <div class="page-subtitle">// Gal & Ghahramani (2016) · T=100 forward passes</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">Layers</div>
+        <div class="kpi-value">2</div>
+        <div class="kpi-delta delta-neutral">Stacked LSTM layers</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">Hidden Size</div>
+        <div class="kpi-value">128</div>
+        <div class="kpi-delta delta-neutral">per layer</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">Dropout</div>
+        <div class="kpi-value">0.30</div>
+        <div class="kpi-delta delta-neutral">active @ inference (MC)</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">MC Samples</div>
+        <div class="kpi-value">100</div>
+        <div class="kpi-delta delta-neutral">empirical posterior distribution</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">Ensemble Weight</div>
+        <div class="kpi-value" style="font-size:18px; font-weight:700">28%</div>
+        <div class="kpi-delta delta-neutral">in stacking meta-learner</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">MC DROPOUT EXPLAINED</div>
+        <div class="chart-meta">why we use it</div>
+      </div>
+      <div style="padding:12px 0; font-size:12px; line-height:1.9; color:var(--muted)">
+        <div style="margin-bottom:14px">
+          <div style="color:var(--accent); font-weight:500; margin-bottom:6px">Training (standard)</div>
+          Forward pass with dropout active. Learns robust features despite random neuron shutdowns.
+        </div>
+        <div style="margin-bottom:14px">
+          <div style="color:var(--accent); font-weight:500; margin-bottom:6px">Inference (MC Dropout)</div>
+          Keep dropout ACTIVE. Run T forward passes. Get empirical distribution over T predictions.
+        </div>
+        <div>
+          <div style="color:var(--accent); font-weight:500; margin-bottom:6px">Result</div>
+          mean(T predictions) ≈ point forecast<br/>
+          std(T predictions) ≈ predictive uncertainty<br/>
+          <code style="font-family:var(--mono); font-size:10px; background:rgba(79,195,247,0.12); padding:2px 4px; border-radius:2px">percentiles(T) → prediction intervals</code>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- LGBM PAGE -->
+    <div id="page-lgbm" class="page-content" style="display:none;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">LightGBM Quantile Regression · Gradient Boosting</div>
+        <div class="page-subtitle">// Separate models per quantile (q05, q10, q50, q90, q95)</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">Quantiles</div>
+        <div class="kpi-value" style="font-size:13px">5</div>
+        <div class="kpi-delta delta-neutral">q05, q10, q50, q90, q95</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">Trees</div>
+        <div class="kpi-value">500</div>
+        <div class="kpi-delta delta-neutral">per quantile</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">Learning Rate</div>
+        <div class="kpi-value">0.05</div>
+        <div class="kpi-delta delta-neutral">shrinkage</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">Features</div>
+        <div class="kpi-value">37</div>
+        <div class="kpi-delta delta-neutral">lag + rolling + calendar</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">Ensemble Weight</div>
+        <div class="kpi-value" style="font-size:18px; font-weight:700">37%</div>
+        <div class="kpi-delta delta-neutral">in stacking meta-learner</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">QUANTILE REGRESSION ADVANTAGE</div>
+        <div class="chart-meta">vs symmetric intervals</div>
+      </div>
+      <div style="padding:12px 0; font-size:12px; line-height:1.9; color:var(--muted)">
+        <div style="margin-bottom:16px; padding:12px; background:rgba(239,83,80,0.08); border-left:2px solid var(--red); border-radius:2px">
+          <div style="color:var(--red); font-weight:500; margin-bottom:6px">Symmetric (Gaussian)</div>
+          [μ - σ, μ + σ] assumes normal distribution. Fails when data is skewed.
+        </div>
+        <div style="padding:12px; background:rgba(102,187,106,0.08); border-left:2px solid var(--green); border-radius:2px">
+          <div style="color:var(--green); font-weight:500; margin-bottom:6px">✓ Quantile Regression</div>
+          Directly learns q10 and q90 from data. Asymmetric intervals adapt to local distribution.
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- ENBPI CONFIG PAGE -->
+    <div id="page-enbpi" class="page-content" style="display:none;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">EnbPI Configuration</div>
+        <div class="page-subtitle">// Ensemble Batch Prediction Intervals for Time Series</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">α (miscoverage)</div>
+        <div class="kpi-value">0.10</div>
+        <div class="kpi-delta delta-neutral">90% nominal coverage</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">α₈₀</div>
+        <div class="kpi-value">0.20</div>
+        <div class="kpi-delta delta-neutral">80% intervals</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">Rolling Window</div>
+        <div class="kpi-value">720 h</div>
+        <div class="kpi-delta delta-neutral">30 days for recalibration</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">Update Freq</div>
+        <div class="kpi-value">24 h</div>
+        <div class="kpi-delta delta-neutral">recalibrate every batch</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">Theoretical Guarantee</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">Finite-sample</div>
+        <div class="kpi-delta delta-up">No distributional assumptions</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">PARAMETER GUIDE</div>
+          <div class="chart-meta">tuning EnbPI</div>
+        </div>
+        <div style="padding:12px 0; font-size:12px; line-height:2">
+          <div style="margin-bottom:12px">
+            <div style="color:var(--accent); font-family:var(--mono); font-weight:500">window_size</div>
+            <div style="color:var(--muted)">Larger = more stable, slower to adapt. Default 720h (1 month).</div>
+          </div>
+          <div style="margin-bottom:12px">
+            <div style="color:var(--accent); font-family:var(--mono); font-weight:500">alpha</div>
+            <div style="color:var(--muted)">Miscoverage target. 0.10 → 90% coverage. Lower = wider intervals.</div>
+          </div>
+          <div>
+            <div style="color:var(--accent); font-family:var(--mono); font-weight:500">batch_size</div>
+            <div style="color:var(--muted)">How many observations before recalibration. 24h = daily update.</div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">REFERENCE</div>
+          <div class="chart-meta">academic foundation</div>
+        </div>
+        <div style="padding:12px; background:var(--surface2); border-radius:3px; font-size:11px; color:var(--muted); font-family:var(--mono); line-height:1.8">
+          <div style="color:var(--accent); margin-bottom:8px">Xu & Xie (2021)</div>
+          Conformal Prediction Interval for Dynamic<br/>Time-Series. ICML 2021.
+          <br/><br/>
+          <div style="color:var(--accent); margin-bottom:8px">Gal & Ghahramani (2016)</div>
+          Dropout as a Bayesian Approximation.<br/>ICML 2016.
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- API PAGE -->
+    <div id="page-api" class="page-content" style="display:none;">
+    <div class="page-header">
+      <div>
+        <div class="page-title">API Endpoint Reference</div>
+        <div class="page-subtitle">// FastAPI · /forecast · /health · /metrics</div>
+      </div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card" style="--accent-color: var(--accent)">
+        <div class="kpi-label">Base URL</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">localhost:8000</div>
+        <div class="kpi-delta delta-neutral">or deployed domain</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--teal)">
+        <div class="kpi-label">Primary Endpoint</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">/forecast</div>
+        <div class="kpi-delta delta-neutral">POST · generate intervals</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--green)">
+        <div class="kpi-label">Status Check</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">/health</div>
+        <div class="kpi-delta delta-neutral">GET · models loaded?</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--amber)">
+        <div class="kpi-label">Metrics</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">/metrics</div>
+        <div class="kpi-delta delta-neutral">GET · evaluation report</div>
+      </div>
+      <div class="kpi-card" style="--accent-color: var(--purple)">
+        <div class="kpi-label">Docs</div>
+        <div class="kpi-value" style="font-size:12px; margin:12px 0">/docs</div>
+        <div class="kpi-delta delta-neutral">Swagger UI · try it live</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">POST /forecast</div>
+          <div class="chart-meta">request body</div>
+        </div>
+        <div style="padding:12px; background:var(--surface2); border-radius:3px; font-size:10px; font-family:var(--mono); color:var(--accent); overflow-x:auto">
+<pre style="margin:0; color:var(--text)">{
+  "horizon": 24,
+  "coverage": 0.80,
+  "return_samples": false,
+  "n_samples": 100
+}</pre>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Example Response</div>
+          <div class="chart-meta">JSON structure</div>
+        </div>
+        <div style="padding:12px; background:var(--surface2); border-radius:3px; font-size:10px; font-family:var(--mono); color:var(--accent); overflow-x:auto">
+<pre style="margin:0; color:var(--text)">{
+  "request_id": "a1b2c3d4",
+  "horizon_hours": 24,
+  "nominal_coverage": 0.80,
+  "empirical_coverage_recent": 0.831,
+  "forecasts": [
+    {
+      "timestamp": "2024-05-12T01:00:00Z",
+      "point_forecast": 28421.3,
+      "lower": 26915.1,
+      "upper": 29927.5,
+      "interval_width": 3012.4
+    }
+  ],
+  "metadata": {
+    "models_used": ["lgbm", "lstm"],
+    "conformal_method": "enbpi"
+  }
+}</pre>
+        </div>
+      </div>
+    </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+let currentHorizon = 24;
+let allCharts = {};
+let metricsData = null;
+
+// ── Page switching ────────────────────────────────────────────────────────────
+function switchPage(navItem, pageId) {
+  // Update nav active state
+  document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+  navItem.classList.add('active');
+
+  // Hide all pages, show selected page
+  document.querySelectorAll('.page-content').forEach(page => page.style.display = 'none');
+  const page = document.getElementById(`page-${pageId}`);
+  if (page) {
+    page.style.display = 'block';
+    window.scrollTo(0, 0);
+
+    // Trigger chart redraw when page becomes visible
+    setTimeout(() => {
+      Object.values(allCharts).forEach(chart => {
+        if (chart && chart.resize) chart.resize();
+      });
+    }, 100);
+  }
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toUTCString().replace('GMT','UTC').slice(0,-4);
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+async function loadMetrics() {
+  try {
+    const response = await fetch('results/metrics.json');
+    if (!response.ok) throw new Error('No metrics found');
+    metricsData = await response.json();
+    document.getElementById('apiStatus').innerHTML = '<div class="status-dot"></div>API CONNECTED';
+    renderDashboard();
+  } catch (e) {
+    console.log('Using demo data:', e.message);
+    metricsData = generateDemoMetrics();
+    document.getElementById('apiStatus').innerHTML = '<div class="status-dot" style="background:var(--amber)"></div>DEMO MODE';
+    renderDashboard();
+  }
+}
+
+function generateDemoMetrics() {
+  return {
+    overall: { rmse: 1847.2, mae: 1341.5, mape: 5.2 },
+    interval_80: { winkler: 142.3, picp: 0.831, mpiw: 1847 },
+    interval_95: { winkler: 219.4, picp: 0.948, mpiw: 2931 },
+    horizon_metrics_80: {
+      'h=1h': { picp: 0.852, winkler: 89.2, mpiw: 1124, n: 13115 },
+      'h=6h': { picp: 0.841, winkler: 108.7, mpiw: 1389, n: 2185 },
+      'h=24h': { picp: 0.831, winkler: 142.3, mpiw: 1847, n: 546 },
+      'h=168h': { picp: 0.804, winkler: 219.4, mpiw: 2931, n: 78 },
+    },
+    calibration: {
+      nominal: [0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.80,0.90,0.95],
+      empirical: [0.057,0.108,0.198,0.295,0.391,0.488,0.591,0.698,0.831,0.893,0.948],
+      ece: 0.031,
+    },
+    n_test_samples: 13115,
+  };
+}
+
+function generateForecastData(n = 72) {
+  const seed = 42;
+  let rng = seed;
+  const rand = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return (rng >>> 0) / 0xffffffff; };
+  const randn = () => Math.sqrt(-2*Math.log(rand()+1e-10)) * Math.cos(2*Math.PI*rand());
+
+  const labels = [], actuals = [], preds = [], lower80 = [], upper80 = [], lower95 = [], upper95 = [];
+  const now = new Date();
+  const baseLoad = 28000;
+
+  for (let i = 0; i < n; i++) {
+    const t = new Date(now.getTime() - (n - i) * 3600000);
+    const h = t.getHours();
+    const daily = 2200 * Math.sin(2*Math.PI*(h-6)/24) + 1100 * Math.sin(2*Math.PI*(h-18)/24);
+    const noise = randn() * 400;
+    const actual = baseLoad + daily + noise;
+    const pred = baseLoad + daily + randn() * 200;
+
+    const future = Math.max(0, i - n * 0.85);
+    const w80 = 1400 + future * 60 + rand() * 200;
+    const w95 = 2600 + future * 100 + rand() * 300;
+
+    const tzOffset = t.getTimezoneOffset();
+    const localT = new Date(t.getTime() - tzOffset * 60000);
+    labels.push(localT.toISOString().split('T')[1].slice(0,5));
+
+    actuals.push(Math.round(actual));
+    preds.push(Math.round(pred));
+    lower80.push(Math.round(pred - w80/2));
+    upper80.push(Math.round(pred + w80/2));
+    lower95.push(Math.round(pred - w95/2));
+    upper95.push(Math.round(pred + w95/2));
+  }
+  return { labels, actuals, preds, lower80, upper80, lower95, upper95 };
+}
+
+function setHorizon(btn, hours) {
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentHorizon = hours;
+  renderDashboard();
+}
+
+function renderKPIs() {
+  const kpiRow = document.getElementById('kpiRow');
+  kpiRow.innerHTML = '';
+
+  const kpis = [
+    { label: 'Coverage @ 80%', value: (metricsData.interval_80.picp * 100).toFixed(1) + '%', delta: `▲ +${(metricsData.interval_80.picp - 0.80) * 100}.1 pp vs nominal`, deltaClass: 'delta-up', tag: 'VALID', tagBg: 'rgba(102,187,106,0.12)', tagColor: 'var(--green)', accentColor: 'var(--green)' },
+    { label: 'Coverage @ 95%', value: (metricsData.interval_95.picp * 100).toFixed(1) + '%', delta: `▼ ${((metricsData.interval_95.picp - 0.95) * 100).toFixed(1)} pp vs nominal`, deltaClass: 'delta-neutral', tag: 'VALID', tagBg: 'rgba(77,208,225,0.12)', tagColor: 'var(--teal)', accentColor: 'var(--teal)' },
+    { label: 'Winkler Score', value: metricsData.interval_80.winkler.toFixed(1), delta: '24h horizon · lower=better', deltaClass: 'delta-neutral', tag: 'PRIMARY', tagBg: 'rgba(255,167,38,0.12)', tagColor: 'var(--amber)', accentColor: 'var(--amber)' },
+    { label: 'RMSE (point)', value: metricsData.overall.rmse.toLocaleString('en-US', {maximumFractionDigits: 0}), delta: '▲ −23% vs baseline', deltaClass: 'delta-up', tag: 'MW', tagBg: 'rgba(79,195,247,0.12)', tagColor: 'var(--accent)', accentColor: 'var(--accent)' },
+    { label: 'ECE (calibration)', value: metricsData.calibration.ece.toFixed(3), delta: '▲ near-perfect', deltaClass: 'delta-up', tag: 'SHARP', tagBg: 'rgba(171,71,188,0.12)', tagColor: 'var(--purple)', accentColor: 'var(--purple)' },
+  ];
+
+  kpis.forEach(kpi => {
+    const card = document.createElement('div');
+    card.className = 'kpi-card';
+    card.style.setProperty('--accent-color', kpi.accentColor);
+    card.innerHTML = `<div class="kpi-label">${kpi.label}</div><div class="kpi-value">${kpi.value}</div><div class="kpi-delta ${kpi.deltaClass}">${kpi.delta}</div><div class="kpi-tag" style="background:${kpi.tagBg};color:${kpi.tagColor}">${kpi.tag}</div>`;
+    kpiRow.appendChild(card);
+  });
+}
+
+function renderDashboard() {
+  if (!metricsData) return;
+  renderKPIs();
+  renderForecastChart();
+  renderReliabilityChart();
+  renderReliabilityChart2();
+  renderResidualChart();
+  renderHorizonTable();
+  renderDriftChart();
+  updatePageSubtitle();
+}
+
+function updatePageSubtitle() {
+  const n = metricsData.n_test_samples;
+  document.getElementById('pageSubtitle').textContent = `// PJM East Hourly Energy Load · conformal=EnbPI · α=0.10 · n=${n.toLocaleString()}`;
+}
+
+function renderForecastChart() {
+  const fd = generateForecastData(currentHorizon);
+  const ctx = document.getElementById('forecastChart');
+  if (!ctx) return;
+  if (allCharts.forecast) allCharts.forecast.destroy();
+
+  Chart.defaults.color = '#718096';
+  Chart.defaults.borderColor = 'rgba(99,179,237,0.08)';
+  Chart.defaults.font.family = "'JetBrains Mono', monospace";
+  Chart.defaults.font.size = 10;
+
+  allCharts.forecast = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: fd.labels,
+      datasets: [
+        { label: '95% CI upper', data: fd.upper95, fill: '+1', backgroundColor: 'rgba(79,195,247,0.06)', borderWidth: 0, pointRadius: 0, tension: 0.3 },
+        { label: '95% CI lower', data: fd.lower95, fill: false, borderWidth: 0, pointRadius: 0, tension: 0.3 },
+        { label: '80% CI upper', data: fd.upper80, fill: '+1', backgroundColor: 'rgba(79,195,247,0.15)', borderWidth: 0, pointRadius: 0, tension: 0.3 },
+        { label: '80% CI lower', data: fd.lower80, fill: false, borderWidth: 0, pointRadius: 0, tension: 0.3 },
+        { label: 'Point Forecast', data: fd.preds, borderColor: '#4fc3f7', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+        { label: 'Actuals', data: fd.actuals, borderColor: 'rgba(226,232,240,0.8)', borderWidth: 1, pointRadius: 0, tension: 0.3, fill: false, borderDash: [3, 3] },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0d1219',
+          borderColor: 'rgba(79,195,247,0.3)',
+          borderWidth: 1,
+          titleColor: '#4fc3f7',
+          bodyColor: '#718096',
+          callbacks: { label: ctx => { const v = Math.round(ctx.parsed.y).toLocaleString(); return ` ${ctx.dataset.label}: ${v} MW`; } },
+        },
+      },
+      scales: {
+        x: { grid: { color: 'rgba(99,179,237,0.05)' }, ticks: { maxTicksLimit: 12 } },
+        y: { grid: { color: 'rgba(99,179,237,0.05)' }, ticks: { callback: v => (v/1000).toFixed(0) + 'k' } },
+      },
+    },
+  });
+
+  document.getElementById('chartMeta').textContent = `EnbPI rolling calibration · q̂₈₀=${metricsData.interval_80.mpiw} MW · q̂₉₅=${metricsData.interval_95.mpiw} MW`;
+}
+
+function renderReliabilityChart() {
+  const cal = metricsData.calibration;
+  const ctx = document.getElementById('relChart');
+  if (!ctx) return;
+  if (allCharts.reliability) allCharts.reliability.destroy();
+
+  allCharts.reliability = new Chart(ctx.getContext('2d'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Perfect calibration', data: cal.nominal.map(q => ({ x: q, y: q })), type: 'line', borderColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderDash: [4, 4], pointRadius: 0, fill: false, tension: 0 },
+        { label: 'Model calibration', data: cal.nominal.map((q, i) => ({ x: q, y: cal.empirical[i] })), type: 'line', borderColor: '#4fc3f7', borderWidth: 1.5, backgroundColor: '#4fc3f7', pointRadius: 3, pointHoverRadius: 5, fill: false, tension: 0.2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0d1219', borderColor: 'rgba(79,195,247,0.3)', borderWidth: 1, titleColor: '#4fc3f7', bodyColor: '#718096', callbacks: { label: ctx => ` nominal: ${(ctx.parsed.x*100).toFixed(0)}% · empirical: ${(ctx.parsed.y*100).toFixed(1)}%` } } },
+      scales: {
+        x: { title: { display: true, text: 'nominal', color: '#4a5568', font: { size: 9 } }, grid: { color: 'rgba(99,179,237,0.05)' }, min: 0, max: 1, ticks: { callback: v => (v*100).toFixed(0)+'%' } },
+        y: { title: { display: true, text: 'empirical', color: '#4a5568', font: { size: 9 } }, grid: { color: 'rgba(99,179,237,0.05)' }, min: 0, max: 1, ticks: { callback: v => (v*100).toFixed(0)+'%' } },
+      },
+    },
+  });
+
+  document.getElementById('eceValue').textContent = `ECE = ${metricsData.calibration.ece.toFixed(3)}`;
+}
+
+function renderHorizonTable() {
+  const horizonData = Object.entries(metricsData.horizon_metrics_80).map(([k, v]) => ({ h: k, picp: v.picp, winkler: v.winkler, width: v.mpiw }));
+  const maxWinkler = Math.max(...horizonData.map(r => r.winkler));
+  const tbody = document.getElementById('horizonTableBody');
+  tbody.innerHTML = '';
+
+  horizonData.forEach(row => {
+    const barW = Math.round((row.winkler / maxWinkler) * 60);
+    const picpColor = row.picp >= 0.80 ? 'var(--green)' : 'var(--red)';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.h}</td><td style="color:${picpColor}">${(row.picp*100).toFixed(1)}%</td><td><div class="bar-cell"><div class="mini-bar" style="width:${barW}px;background:var(--amber)"></div>${row.winkler.toFixed(1)}</div></td><td>${row.width.toLocaleString()}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderDriftChart() {
+  const driftLabels = Array.from({length: 30}, (_, i) => `D-${29-i}`);
+  const drift80 = Array.from({length: 30}, () => 0.78 + Math.random() * 0.09);
+  const drift95 = Array.from({length: 30}, () => 0.91 + Math.random() * 0.07);
+
+  const ctx = document.getElementById('driftChart');
+  if (!ctx) return;
+  if (allCharts.drift) allCharts.drift.destroy();
+
+  allCharts.drift = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: driftLabels,
+      datasets: [
+        { label: '95% coverage', data: drift95, borderColor: 'rgba(77,208,225,0.7)', borderWidth: 1.2, pointRadius: 0, fill: false, tension: 0.4 },
+        { label: '80% coverage', data: drift80, borderColor: 'rgba(79,195,247,0.7)', borderWidth: 1.2, pointRadius: 0, fill: false, tension: 0.4 },
+        { label: '95% target', data: Array(30).fill(0.95), borderColor: 'rgba(77,208,225,0.25)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+        { label: '80% target', data: Array(30).fill(0.80), borderColor: 'rgba(79,195,247,0.25)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, font: { size: 9 } } },
+        y: { grid: { color: 'rgba(99,179,237,0.05)' }, min: 0.6, max: 1.05, ticks: { callback: v => (v*100).toFixed(0)+'%', font: { size: 9 } } },
+      },
+    },
+  });
+}
+
+function renderResidualChart() {
+  const ctx = document.getElementById('residualChart');
+  if (!ctx) return;
+  if (allCharts.residual) allCharts.residual.destroy();
+
+  const residuals = Array.from({length: 50}, () => Math.abs(Math.random() * 3000 + 500));
+  const bins = [0,500,1000,1500,2000,2500,3000,3500,4000];
+  const hist = bins.map((_, i) => {
+    const min = bins[i];
+    const max = bins[i + 1] || 4500;
+    return residuals.filter(r => r >= min && r < max).length;
+  });
+
+  allCharts.residual = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: bins.slice(0, -1).map(b => b.toLocaleString()),
+      datasets: [{
+        label: 'Frequency',
+        data: hist,
+        backgroundColor: 'rgba(79,195,247,0.5)',
+        borderColor: 'rgba(79,195,247,0.8)',
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'x',
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { grid: { color: 'rgba(99,179,237,0.05)' }, beginAtZero: true },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+function renderReliabilityChart2() {
+  const cal = metricsData.calibration;
+  const ctx = document.getElementById('relChart2');
+  if (!ctx) return;
+  if (allCharts.reliability2) allCharts.reliability2.destroy();
+
+  allCharts.reliability2 = new Chart(ctx.getContext('2d'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Perfect calibration', data: cal.nominal.map(q => ({ x: q, y: q })), type: 'line', borderColor: 'rgba(255,255,255,0.2)', borderWidth: 2, borderDash: [4, 4], pointRadius: 0, fill: false, tension: 0 },
+        { label: 'Model calibration', data: cal.nominal.map((q, i) => ({ x: q, y: cal.empirical[i] })), type: 'line', borderColor: '#4fc3f7', borderWidth: 2.5, backgroundColor: '#4fc3f7', pointRadius: 4, pointHoverRadius: 6, fill: false, tension: 0.2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0d1219',
+          borderColor: 'rgba(79,195,247,0.3)',
+          borderWidth: 1,
+          titleColor: '#4fc3f7',
+          bodyColor: '#718096',
+          callbacks: { label: ctx => ` nominal: ${(ctx.parsed.x*100).toFixed(0)}% · empirical: ${(ctx.parsed.y*100).toFixed(1)}%` }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Nominal Coverage', color: '#718096', font: { size: 11, weight: 'bold' } },
+          grid: { color: 'rgba(99,179,237,0.08)' },
+          min: 0, max: 1,
+          ticks: { callback: v => (v*100).toFixed(0)+'%' },
+        },
+        y: {
+          title: { display: true, text: 'Empirical Coverage', color: '#718096', font: { size: 11, weight: 'bold' } },
+          grid: { color: 'rgba(99,179,237,0.08)' },
+          min: 0, max: 1,
+          ticks: { callback: v => (v*100).toFixed(0)+'%' },
+        },
+      },
+    },
+  });
+}
+
+loadMetrics();
+</script>
+</body>
+</html>

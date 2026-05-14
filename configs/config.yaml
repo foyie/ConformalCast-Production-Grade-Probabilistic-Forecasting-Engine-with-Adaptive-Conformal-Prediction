@@ -1,0 +1,66 @@
+data:
+  raw_path: "data/raw/"
+  processed_path: "data/processed/"
+  dataset: "pjm"  # Options: pjm, finance, m5
+  target_col: "PJME_MW"
+  date_col: "Datetime"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  # test_ratio: 0.15 (implied)
+
+features:
+  lag_hours: [1, 2, 3, 6, 12, 24, 48, 168]  # 168 = 1 week
+  rolling_windows: [6, 24, 168]
+  time_features: ["hour", "dayofweek", "month", "is_weekend", "quarter"]
+
+neuralprophet:
+  n_forecasts: 24
+  n_lags: 48
+  yearly_seasonality: true
+  weekly_seasonality: true
+  daily_seasonality: true
+  learning_rate: 0.001
+  epochs: 50
+  batch_size: 64
+
+lstm:
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.3          # Also used at inference for MC Dropout
+  sequence_length: 168  # 1 week of hourly data
+  learning_rate: 0.001
+  epochs: 50
+  batch_size: 32
+  mc_samples: 100       # Forward passes for uncertainty estimation
+
+lgbm_quantile:
+  quantiles: [0.05, 0.10, 0.50, 0.90, 0.95]
+  n_estimators: 500
+  learning_rate: 0.05
+  num_leaves: 63
+  min_child_samples: 20
+  subsample: 0.8
+  colsample_bytree: 0.8
+
+conformal:
+  alpha: 0.10           # Target miscoverage rate (1-alpha = 90% coverage)
+  alpha_80: 0.20        # For 80% nominal coverage
+  method: "enbpi"       # Options: split, enbpi (online conformal for time series)
+  calibration_size: 0.15
+  rolling_window: 720   # Hours for rolling calibration (30 days)
+
+ensemble:
+  method: "stacking"
+  meta_learner: "ridge"
+  cv_folds: 5
+
+evaluation:
+  horizons: [1, 6, 24, 168]  # 1h, 6h, 1day, 1week
+  nominal_coverages: [0.80, 0.90, 0.95]
+  output_path: "results/"
+
+serving:
+  host: "0.0.0.0"
+  port: 8000
+  model_path: "models/"
+  cache_predictions: true

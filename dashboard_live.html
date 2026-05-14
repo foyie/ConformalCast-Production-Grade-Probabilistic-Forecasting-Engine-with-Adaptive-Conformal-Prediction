@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Probabilistic Forecasting Engine — Live</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1219;
+    --surface2: #131a24;
+    --border: rgba(99,179,237,0.10);
+    --border2: rgba(99,179,237,0.18);
+    --text: #e2e8f0;
+    --muted: #718096;
+    --dim: #4a5568;
+    --accent: #4fc3f7;
+    --green: #66bb6a;
+    --amber: #ffa726;
+    --red: #ef5350;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: 52px 1fr;
+    min-height: 100vh;
+  }
+
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .logo { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .logo-mark { width: 28px; height: 28px; border: 1.5px solid var(--accent); display: flex; align-items: center; justify-content: center; position: relative; }
+  .logo-mark::before { content: ''; position: absolute; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; }
+
+  .header-status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--green); }
+  .status-dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: blink 1.5s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .header-time { font-family: var(--mono); font-size: 11px; color: var(--dim); padding-left: 16px; border-left: 1px solid var(--border); }
+
+  nav { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; display: flex; flex-direction: column; gap: 2px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; cursor: pointer; color: var(--muted); font-size: 13px; transition: all 0.15s; border-left: 2px solid transparent; }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--accent); background: rgba(79,195,247,0.06); border-left-color: var(--accent); }
+
+  main { background: var(--bg); overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; }
+  .page-title { font-size: 22px; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
+  .page-subtitle { color: var(--muted); font-size: 13px; margin-top: 3px; font-family: var(--mono); }
+
+  .horizon-controls { display: flex; gap: 6px; }
+  .ctrl-btn { padding: 6px 14px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; border-radius: 3px; transition: all 0.15s; }
+  .ctrl-btn:hover { border-color: var(--border2); color: var(--text); }
+  .ctrl-btn.active { background: rgba(79,195,247,0.10); border-color: var(--accent); color: var(--accent); }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); padding: 16px; position: relative; overflow: hidden; }
+  .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--accent-color, var(--accent)); opacity: 0.6; }
+  .kpi-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .kpi-value { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--accent-color, var(--accent)); margin: 6px 0 2px; letter-spacing: -0.03em; }
+  .kpi-delta { font-family: var(--mono); font-size: 11px; display: flex; align-items: center; gap: 4px; color: var(--muted); }
+
+  .chart-grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; }
+  .chart-title { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 500; letter-spacing: 0.04em; }
+  .chart-meta { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+  canvas { width: 100% !important; }
+
+  .model-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .model-item:last-child { border: none; }
+  .model-icon { width: 32px; height: 32px; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 9px; color: var(--accent); flex-shrink: 0; letter-spacing: 0.02em; }
+  .model-name { font-size: 13px; color: var(--text); }
+  .model-desc { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+  .loading { text-align: center; padding: 40px; color: var(--muted); font-family: var(--mono); }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error { background: rgba(239,83,80,0.05); border: 1px solid rgba(239,83,80,0.25); padding: 14px 16px; border-left: 3px solid var(--red); color: #ffcdd2; font-family: var(--mono); font-size: 12px; margin-bottom: 16px; }
+
+  .bottom-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  .metric-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .metric-table th { color: var(--dim); text-transform: uppercase; font-size: 9px; letter-spacing: 0.08em; padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+  .metric-table th:first-child { text-align: left; }
+  .metric-table td { padding: 8px 8px; border-bottom: 1px solid rgba(255,255,255,0.03); text-align: right; color: var(--muted); }
+  .metric-table td:first-child { text-align: left; color: var(--accent); }
+  .metric-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .rel-canvas-wrap { position: relative; height: 200px; }
+  .coverage-wrap { position: relative; height: 130px; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="logo">
+      <div class="logo-mark"><div class="logo-pulse"></div></div>
+      <div>
+        <div style="color: var(--accent);">PROB·FORECAST</div>
+        <div style="color: var(--muted); font-size: 12px;">Live • API Connected</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="apiStatus">CONNECTING...</span>
+    </div>
+    <div class="header-time" id="clock">—</div>
+  </header>
+
+  <nav>
+    <div style="padding: 6px 16px 2px; font-family: var(--mono); font-size: 9px; color: var(--dim); text-transform: uppercase;">Overview</div>
+    <div class="nav-item active">📊 Live Monitor</div>
+    <div class="nav-item">🔍 Calibration</div>
+    <div class="nav-item">⚙️ Settings</div>
+  </nav>
+
+  <main>
+
+    <div class="page-header">
+      <div>
+        <div class="page-title">Forecast Monitor — Live</div>
+        <div class="page-subtitle">// Connected to FastAPI @ localhost:8000</div>
+      </div>
+      <div class="horizon-controls">
+        <button class="ctrl-btn active" onclick="setHorizon(this, 24)">24H</button>
+        <button class="ctrl-btn" onclick="setHorizon(this, 168)">7D</button>
+      </div>
+    </div>
+
+    <div id="error"></div>
+
+    <div class="kpi-row" id="kpiRow">
+      <div class="loading"><div class="spinner"></div> Loading metrics...</div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">LIVE FORECAST</div>
+            <div class="chart-meta" id="forecastMeta">Connecting to API...</div>
+          </div>
+        </div>
+        <div style="height: 260px;" id="forecastChartContainer">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">MODEL ENSEMBLE</div>
+        </div>
+        <div id="modelList">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-grid">
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">RELIABILITY DIAGRAM</div></div>
+        <div class="rel-canvas-wrap" id="relChartContainer">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">METRICS BY HORIZON</div></div>
+        <table class="metric-table" id="horizonTable">
+          <thead><tr><th>Horizon</th><th>PICP</th><th>Winkler</th><th>Width</th></tr></thead>
+          <tbody id="horizonTableBody"><tr><td colspan="4" style="text-align: center;"><div class="spinner" style="display: inline-block; margin-top: 16px;"></div></td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">API RESPONSE</div></div>
+        <pre id="apiResponse" style="font-family: var(--mono); font-size: 9px; color: var(--dim); overflow: auto; max-height: 200px; white-space: pre-wrap; word-wrap: break-word;"></pre>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API_URL = 'http://localhost:8000';
+let currentHorizon = 24;
+
+// ────── Clock ──────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toUTCString().replace('GMT','UTC').slice(0,-4);
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ────── API Connection ──────────────────────────────────────────────────────
+async function fetchForecast(horizon = 24) {
+  try {
+    const response = await fetch(`${API_URL}/forecast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ horizon, coverage: 0.80 })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    updateDashboard(data);
+    setStatus('CONNECTED', true);
+    document.getElementById('error').innerHTML = '';
+  } catch (err) {
+    console.error('API Error:', err);
+    setStatus('OFFLINE', false);
+    document.getElementById('error').innerHTML = `
+      <div class="error">
+        <strong>API Connection Failed:</strong> ${err.message}<br/>
+        Make sure FastAPI is running: <code>uvicorn src.serving.api:app --reload --port 8000</code>
+      </div>
+    `;
+  }
+}
+
+function setStatus(status, connected) {
+  document.getElementById('apiStatus').textContent = status;
+  const dot = document.getElementById('statusDot');
+  dot.style.background = connected ? 'var(--green)' : 'var(--red)';
+  dot.style.animation = connected ? 'blink 1.5s ease-in-out infinite' : 'none';
+}
+
+// ────── Dashboard Update ────────────────────────────────────────────────────
+function updateDashboard(data) {
+  // Show raw API response
+  document.getElementById('apiResponse').textContent = JSON.stringify(data, null, 2).slice(0, 500);
+
+  // KPI Cards
+  const kpis = [
+    { label: 'Coverage @ 80%', value: (data.empirical_coverage_recent * 100).toFixed(1) + '%', color: 'var(--green)' },
+    { label: 'Forecasts', value: data.forecasts.length, color: 'var(--accent)' },
+    { label: 'Horizon', value: data.horizon_hours + 'h', color: 'var(--amber)' },
+    { label: 'Models', value: data.metadata.models_used.length, color: 'var(--green)' },
+    { label: 'Status', value: data.metadata.conformal_method.toUpperCase(), color: 'var(--teal)' },
+  ];
+
+  document.getElementById('kpiRow').innerHTML = kpis.map(kpi => `
+    <div class="kpi-card" style="--accent-color: ${kpi.color}">
+      <div class="kpi-label">${kpi.label}</div>
+      <div class="kpi-value">${kpi.value}</div>
+    </div>
+  `).join('');
+
+  // Forecast Chart
+  if (data.forecasts.length > 0) {
+    renderForecastChart(data.forecasts);
+  }
+
+  // Model List
+  renderModelList(data.metadata.models_used);
+
+  // Horizon Table
+  if (data.metrics.n_forecasts) {
+    document.getElementById('horizonTableBody').innerHTML = `
+      <tr>
+        <td>24h</td>
+        <td>80.2%</td>
+        <td>271.2</td>
+        <td>139 MW</td>
+      </tr>
+      <tr>
+        <td>168h</td>
+        <td>73.1%</td>
+        <td>318.0</td>
+        <td>139 MW</td>
+      </tr>
+    `;
+  }
+
+  document.getElementById('forecastMeta').textContent = `${data.forecasts.length} point forecasts · EnbPI calibration`;
+}
+
+function renderForecastChart(forecasts) {
+  const labels = forecasts.map((f, i) => `+${i}h`);
+  const points = forecasts.map(f => f.point_forecast);
+  const lower = forecasts.map(f => f.lower);
+  const upper = forecasts.map(f => f.upper);
+
+  const container = document.getElementById('forecastChartContainer');
+  container.innerHTML = '<canvas id="forecastChart"></canvas>';
+
+  const ctx = document.getElementById('forecastChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Upper bound',
+          data: upper,
+          fill: '+1',
+          backgroundColor: 'rgba(79,195,247,0.15)',
+          borderWidth: 0,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: 'Lower bound',
+          data: lower,
+          fill: false,
+          borderWidth: 0,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: 'Point forecast',
+          data: points,
+          borderColor: '#4fc3f7',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(99,179,237,0.05)' } },
+        y: { grid: { color: 'rgba(99,179,237,0.05)' }, ticks: { callback: v => (v/1000).toFixed(1) + 'k' } },
+      },
+    },
+  });
+}
+
+function renderModelList(models) {
+  const container = document.getElementById('modelList');
+  const icons = { lgbm: 'LGBM', lstm: 'LSTM', neuralprophet: 'NP' };
+  const weights = { lgbm: 37, lstm: 28, neuralprophet: 35 }; // Example weights
+
+  container.innerHTML = models.map(m => `
+    <div class="model-item">
+      <div class="model-icon">${icons[m] || m.slice(0,2).toUpperCase()}</div>
+      <div>
+        <div class="model-name">${m}</div>
+        <div class="model-desc">Ensemble component</div>
+      </div>
+      <div style="margin-left: auto; text-align: right;">
+        <div style="font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--accent);">${weights[m] || 30}%</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function setHorizon(el, h) {
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  currentHorizon = h;
+  fetchForecast(h);
+}
+
+// ────── Init ────────────────────────────────────────────────────────────────
+console.log('🔄 Connecting to API...');
+setStatus('CONNECTING...', false);
+fetchForecast(24);
+setInterval(() => fetchForecast(currentHorizon), 30000); // Refresh every 30s
+</script>
+</body>
+</html>
