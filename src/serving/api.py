@@ -22,7 +22,11 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from src.serving.monitoring import ModelMonitor
+import os
 
+# Load environment variables
+PORT = int(os.getenv("PORT", 8000))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 monitor = ModelMonitor()
 
 app = FastAPI(
@@ -332,3 +336,7 @@ async def health():
         return {"status": "degraded", "reason": "Coverage < 75%"}
 
     return {"status": "healthy"}
+
+if __name__ == "__main__":
+    debug_mode = ENVIRONMENT == "development"
+    uvicorn.run(app, host="0.0.0.0", port=PORT, reload=debug_mode)
