@@ -1,8 +1,14 @@
 """
-Model Monitoring & Drift Detection
-====================================
-Tracks model performance metrics in real-time.
-Alerts when coverage drops or RMSE spikes.
+Model Monitoring
+=================
+Track forecast quality in production. Alert on degradation.
+Generates JSON log of all predictions for alerting and debugging.
+
+Usage:
+  monitor = ModelMonitor()
+  monitor.log_batch_metrics(y_true, y_pred, lower, upper, horizon=24)
+  report = monitor.get_report()  # 7-day summary
+  health = monitor.health_check()  # Quick health status
 """
 
 import json
@@ -13,12 +19,12 @@ from typing import Dict, List, Optional
 
 
 class ModelMonitor:
-    """Track model performance over time. Alert when things break."""
-    
+    """Production monitoring for probabilistic forecasts."""
+
     def __init__(self, metrics_history_path: str = "models/metrics_history.jsonl"):
         self.metrics_path = metrics_history_path
         Path(self.metrics_path).parent.mkdir(parents=True, exist_ok=True)
-    
+
     def log_batch_metrics(
         self,
         y_true: np.ndarray,
@@ -26,183 +32,208 @@ class ModelMonitor:
         lower: np.ndarray,
         upper: np.ndarray,
         horizon: int = 24,
-        stage: str = "test",
+        model_name: str = "ensemble",
     ) -> None:
-        """Log metrics for a batch of predictions."""
-        
+        """
+        Log metrics for a batch of predictions.
+
+        Args:
+            y_true: actual values
+            y_pred: point forecasts
+            lower: lower prediction intervals
+            upper: upper prediction intervals
+            horizon: forecast horizon (hours)
+            model_name: which model variant
+        """
         from src.evaluation.metrics import picp, mpiw, winkler_score
-        
-        coverage = float(picp(y_true, lower, upper))
-        width = float(mpiw(lower, upper))
-        winkler = float(winkler_score(y_true, lower, upper, alpha=0.20))
+
+        # Compute metrics
+        coverage = picp(y_true, lower, upper)
+        width = mpiw(lower, upper)
+        winkler = winkler_score(y_true, lower, upper, alpha=0.20)
         rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
         mae = float(np.mean(np.abs(y_true - y_pred)))
-        
+
+        # Count misses
+        upper_misses = int(np.sum(y_true > upper))
+        lower_misses = int(np.sum(y_true < lower))
+
         record = {
             "timestamp": datetime.utcnow().isoformat(),
-            "horizon": horizon,
-            "stage": stage,
+            "horizon_hours": horizon,
+            "model_name": model_name,
             "n_samples": int(len(y_true)),
-            "coverage": coverage,
-            "interval_width": width,
-            "winkler_score": winkler,
-            "rmse": rmse,
-            "mae": mae,
+            "coverage": float(coverage),
+            "interval_width": float(width),
+            "winkler_score": float(winkler),
+            "rmse": float(rmse),
+            "mae": float(mae),
+            "upper_misses": upper_misses,
+            "lower_misses": lower_misses,
+            "asymmetry": float(lower_misses - upper_misses) / len(y_true),
         }
-        
+
         # Append to JSONL
         with open(self.metrics_path, 'a') as f:
             f.write(json.dumps(record) + "\n")
-        
+
         # Check for alerts
         self._check_alerts(record)
-    
+
     def _check_alerts(self, record: Dict) -> None:
-        """Alert if metrics are out of bounds."""
-        
+        """Alert if metrics go out of bounds."""
+
         alerts = []
-        
-        # Coverage thresholds
+
         if record["coverage"] < 0.75:
             alerts.append(
-                f"⚠ ALERT: Coverage dropped to {record['coverage']:.1%} (below 75% threshold)"
+                f"CRITICAL: Coverage {record['coverage']:.1%} below 75% threshold"
             )
-        elif record["coverage"] > 0.95:
+        elif record["coverage"] < 0.78:
             alerts.append(
-                f"⚠ WARNING: Coverage {record['coverage']:.1%} (too high, intervals may be too wide)"
+                f"WARNING: Coverage {record['coverage']:.1%} below 80% target"
             )
-        
-        # Winkler threshold
+
         if record["winkler_score"] > 200:
             alerts.append(
-                f"⚠ ALERT: Winkler score {record['winkler_score']:.0f} (baseline: ~140)"
+                f"WARNING: Winkler score {record['winkler_score']:.0f} exceeds baseline 142"
             )
-        
-        # RMSE threshold
-        baseline_rmse = 1847  # From original evaluation
-        if record["rmse"] > baseline_rmse * 1.20:
+
+        if record["rmse"] > 2032:
             alerts.append(
-                f"⚠ ALERT: RMSE {record['rmse']:.0f} MW (baseline: {baseline_rmse}, +20% threshold)"
+                f"WARNING: RMSE {record['rmse']:.0f} exceeds baseline 1847"
             )
-        
-        # Compare to rolling average
-        if record["stage"] != "train":  # Only check on val/test
-            history = self._get_recent_history(days=7)
-            if len(history) > 5:  # Need minimum history
-                mean_coverage = np.mean([r["coverage"] for r in history])
-                if record["coverage"] < mean_coverage - 0.05:
-                    alerts.append(
-                        f"⚠ TREND: Coverage dropped {(mean_coverage - record['coverage'])*100:.1f} pp "
-                        f"from 7-day average ({mean_coverage:.1%})"
-                    )
-        
-        if alerts:
-            print("\n" + "="*70)
-            for alert in alerts:
-                print(alert)
-            print("="*70 + "\n")
-    
+
+        if abs(record["asymmetry"]) > 0.05:
+            alerts.append(
+                f"WARNING: Asymmetric misses detected (ratio={record['asymmetry']:.3f})"
+            )
+
+        for alert in alerts:
+            print(alert)
+
     def _get_recent_history(self, days: int = 7) -> List[Dict]:
         """Load metrics from last N days."""
         cutoff = datetime.utcnow() - timedelta(days=days)
         history = []
-        
+
         if Path(self.metrics_path).exists():
             with open(self.metrics_path) as f:
                 for line in f:
-                    if not line.strip():
-                        continue
-                    record = json.loads(line)
                     try:
+                        record = json.loads(line)
                         ts = datetime.fromisoformat(record["timestamp"])
                         if ts > cutoff:
                             history.append(record)
-                    except (ValueError, KeyError):
+                    except (json.JSONDecodeError, KeyError):
                         continue
-        
+
         return history
-    
-    def get_report(self, days: int = 7) -> Dict:
-        """Return summary report of N days of metrics."""
-        history = self._get_recent_history(days=days)
-        
+
+    def get_report(self) -> Dict:
+        """Generate 7-day performance summary for dashboard."""
+        history = self._get_recent_history(days=7)
+
         if not history:
-            return {"error": "No metrics history", "n_records": 0}
-        
-        coverages = [r["coverage"] for r in history]
-        winklers = [r["winkler_score"] for r in history]
-        rmses = [r["rmse"] for r in history]
-        maes = [r["mae"] for r in history]
-        
-        # Trend: is latest better or worse than mean of history?
-        cov_trend = "↓ worse" if coverages[-1] < np.mean(coverages[:-1]) else "↑ better"
-        rmse_trend = "↑ worse" if rmses[-1] > np.mean(rmses[:-1]) else "↓ better"
-        
+            return {"status": "no_data", "message": "No metrics history found"}
+
+        coverages = np.array([r["coverage"] for r in history])
+        winklers = np.array([r["winkler_score"] for r in history])
+        rmses = np.array([r["rmse"] for r in history])
+        widths = np.array([r["interval_width"] for r in history])
+
+        coverage_trend = "Declining" if coverages[-1] < np.mean(coverages[:-1]) else "Improving"
+        rmse_trend = "Degrading" if rmses[-1] > np.mean(rmses[:-1]) else "Improving"
+
+        if np.mean(coverages) >= 0.80 and np.mean(coverages) <= 0.95:
+            status = "Healthy"
+        elif np.mean(coverages) >= 0.75:
+            status = "Degraded"
+        else:
+            status = "Critical"
+
         return {
-            "period_days": days,
+            "status": status,
+            "period_days": 7,
             "n_batches": len(history),
             "coverage": {
                 "mean": float(np.mean(coverages)),
                 "std": float(np.std(coverages)),
                 "min": float(np.min(coverages)),
                 "max": float(np.max(coverages)),
-                "latest": float(coverages[-1]),
-                "trend": cov_trend,
+                "trend": coverage_trend,
+                "target": 0.80,
             },
             "winkler_score": {
                 "mean": float(np.mean(winklers)),
                 "std": float(np.std(winklers)),
-                "min": float(np.min(winklers)),
-                "max": float(np.max(winklers)),
+                "baseline": 142.3,
             },
             "rmse": {
                 "mean": float(np.mean(rmses)),
-                "std": float(np.std(rmses)),
-                "latest": float(rmses[-1]),
                 "trend": rmse_trend,
+                "baseline": 1847,
             },
-            "mae": {
-                "mean": float(np.mean(maes)),
-                "latest": float(maes[-1]),
+            "interval_width": {
+                "mean": float(np.mean(widths)),
+                "trend": "Narrowing" if widths[-1] < np.mean(widths[:-1]) else "Widening",
             },
+            "recent_records": history[-5:],
         }
-    
-    def print_report(self, days: int = 7) -> None:
-        """Pretty-print monitoring report."""
-        report = self.get_report(days=days)
-        
-        if "error" in report:
-            print(f"No metrics to report: {report['error']}")
-            return
-        
-        print("\n" + "="*70)
-        print(f"MONITORING REPORT ({report['period_days']}-day rolling window)")
-        print("="*70)
-        
-        print(f"\nCoverage (target: 80%):")
-        print(f"  Mean:   {report['coverage']['mean']:.1%}")
-        print(f"  Std:    {report['coverage']['std']:.2%}")
-        print(f"  Range:  {report['coverage']['min']:.1%} → {report['coverage']['max']:.1%}")
-        print(f"  Latest: {report['coverage']['latest']:.1%} {report['coverage']['trend']}")
-        
-        print(f"\nWinkler Score:")
-        print(f"  Mean:   {report['winkler_score']['mean']:.1f}")
-        print(f"  Std:    {report['winkler_score']['std']:.1f}")
-        print(f"  Range:  {report['winkler_score']['min']:.1f} → {report['winkler_score']['max']:.1f}")
-        
-        print(f"\nRMSE (baseline: 1847 MW):")
-        print(f"  Mean:   {report['rmse']['mean']:.0f} MW")
-        print(f"  Latest: {report['rmse']['latest']:.0f} MW {report['rmse']['trend']}")
-        
-        print(f"\nMAE:")
-        print(f"  Mean:   {report['mae']['mean']:.0f} MW")
-        print(f"  Latest: {report['mae']['latest']:.0f} MW")
-        
-        print(f"\nBatches processed: {report['n_batches']}")
-        print("="*70 + "\n")
-    
-    def clear_history(self) -> None:
-        """Clear all metrics history (use cautiously)."""
-        if Path(self.metrics_path).exists():
-            Path(self.metrics_path).unlink()
-            print(f"Cleared metrics history at {self.metrics_path}")
+
+    def health_check(self) -> Dict:
+        """Quick health check for API /health endpoint."""
+        report = self.get_report()
+
+        if report.get("status") == "no_data":
+            return {"monitoring": False, "reason": "No metrics history"}
+
+        coverage = report["coverage"]["mean"]
+        rmse = report["rmse"]["mean"]
+        baseline_rmse = report["rmse"]["baseline"]
+
+        return {
+            "monitoring": True,
+            "coverage_ok": coverage >= 0.75,
+            "rmse_ok": rmse <= baseline_rmse * 1.15,
+            "overall_healthy": coverage >= 0.75 and rmse <= baseline_rmse * 1.15,
+            "coverage": float(coverage),
+            "rmse": float(rmse),
+            "status": report["status"],
+        }
+
+
+def print_monitoring_report(monitor: ModelMonitor) -> None:
+    """Pretty-print monitoring report (for CLI use)."""
+    report = monitor.get_report()
+
+    if report.get("status") == "no_data":
+        print("No monitoring data yet")
+        return
+
+    print("\n" + "=" * 70)
+    print(f"MONITORING REPORT (Last 7 days) - Status: {report['status']}")
+    print("=" * 70)
+
+    cov = report["coverage"]
+    print(f"\nCOVERAGE (target: 80%)")
+    print(f"  Mean:    {cov['mean']:.1%}  [{cov['trend']}]")
+    print(f"  Range:   {cov['min']:.1%} to {cov['max']:.1%}")
+    print(f"  StdDev:  {cov['std']:.2%}")
+
+    rmse = report["rmse"]
+    print(f"\nRMSE (baseline: {rmse['baseline']:.0f} MW)")
+    print(f"  Mean:   {rmse['mean']:.0f} MW ({rmse['mean']/rmse['baseline']*100:.0f}% of baseline)")
+    print(f"  Trend:  {rmse['trend']}")
+
+    winkler = report["winkler_score"]
+    print(f"\nWINKLER SCORE (baseline: {winkler['baseline']:.0f})")
+    print(f"  Mean:   {winkler['mean']:.0f}  (std_dev={winkler['std']:.0f})")
+
+    width = report["interval_width"]
+    print(f"\nINTERVAL WIDTH")
+    print(f"  Mean:   {width['mean']:.0f} MW")
+    print(f"  Trend:  {width['trend']}")
+
+    print(f"\nBatches processed: {report['n_batches']}")
+    print("=" * 70 + "\n")

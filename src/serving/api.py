@@ -21,13 +21,7 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from src.serving.monitoring import ModelMonitor
-import os
 
-# Load environment variables
-PORT = int(os.getenv("PORT", 8000))
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-monitor = ModelMonitor()
 
 app = FastAPI(
     title="Probabilistic Forecasting Engine",
@@ -120,6 +114,28 @@ STARTUP_TIME = time.time()
 
 # ── Endpoints ───────────────────────────────────────────────────────────────
 
+@app.get("/")
+async def root():
+    """API root - returns info about the system."""
+    return {
+        "name": "Probabilistic Forecasting Engine",
+        "version": "1.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "forecast": "/forecast (POST)",
+            "metrics": "/metrics",
+            "models": "/models",
+            "monitoring": {
+                "report": "/monitoring/report",
+                "health": "/monitoring/health"
+            },
+            "docs": "/docs",
+        },
+        "description": "Ensemble probabilistic forecasting with conformal prediction"
+    }
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health():
     return HealthResponse(
@@ -129,38 +145,28 @@ async def health():
     )
 
 
-
 @app.post("/forecast", response_model=ForecastResponse)
 async def forecast(request: ForecastRequest):
+    """
+    Generate probabilistic forecast with calibrated prediction intervals.
+
+    Uses ensemble of available models (LightGBM + LSTM) with conformal
+    calibration to guarantee coverage.
+    """
     import uuid
 
     request_id = str(uuid.uuid4())[:8]
     generated_at = datetime.utcnow().isoformat() + "Z"
 
+    # Generate mock forecast if models not loaded (demo mode)
     if not MODELS:
         return _demo_forecast(request, request_id, generated_at)
 
+    # Build feature matrix for forecast horizon
     try:
         forecasts = _generate_forecasts(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Forecast generation failed: {str(e)}")
-
-    # ── Monitoring hook ─────────────────────────────
-    try:
-        y_recent = np.array([...])       # actual recent observed values
-        y_pred_recent = np.array([f.point_forecast for f in forecasts])
-        lower = np.array([f.lower for f in forecasts])
-        upper = np.array([f.upper for f in forecasts])
-
-        monitor.log_batch_metrics(
-            y_recent,
-            y_pred_recent,
-            lower,
-            upper
-        )
-    except Exception as monitor_error:
-        print(f"Monitoring failed: {monitor_error}")
-    # ───────────────────────────────────────────────
 
     return ForecastResponse(
         request_id=request_id,
@@ -178,45 +184,6 @@ async def forecast(request: ForecastRequest):
             "conformal_method": "enbpi",
         },
     )
-
-# async def forecast(request: ForecastRequest):
-#     """
-#     Generate probabilistic forecast with calibrated prediction intervals.
-
-#     Uses ensemble of available models (LightGBM + LSTM) with conformal
-#     calibration to guarantee coverage.
-#     """
-#     import uuid
-
-#     request_id = str(uuid.uuid4())[:8]
-#     generated_at = datetime.utcnow().isoformat() + "Z"
-
-#     # Generate mock forecast if models not loaded (demo mode)
-#     if not MODELS:
-#         return _demo_forecast(request, request_id, generated_at)
-
-#     # Build feature matrix for forecast horizon
-#     try:
-#         forecasts = _generate_forecasts(request)
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Forecast generation failed: {str(e)}")
-
-#     return ForecastResponse(
-#         request_id=request_id,
-#         generated_at=generated_at,
-#         horizon_hours=request.horizon,
-#         nominal_coverage=request.coverage,
-#         empirical_coverage_recent=None,
-#         forecasts=forecasts,
-#         metrics={
-#             "model": "ensemble",
-#             "n_forecasts": len(forecasts),
-#         },
-#         metadata={
-#             "models_used": list(MODELS.keys()),
-#             "conformal_method": "enbpi",
-#         },
-#     )
 
 
 def _demo_forecast(request: ForecastRequest, request_id: str, generated_at: str) -> ForecastResponse:
@@ -309,34 +276,24 @@ async def get_model_info():
         "total_loaded": len(MODELS),
     }
 
-from src.serving.monitoring import ModelMonitor
-
-monitor = ModelMonitor()
-
-@app.post("/forecast")
-async def forecast(request: ForecastRequest):
-    # ... generate forecast ...
-
-    # Log metrics
-    monitor.log_batch_metrics(y_recent, y_pred_recent, lower, upper)
-
-    return response
 
 @app.get("/monitoring/report")
 async def monitoring_report():
-    """Return 7-day monitoring summary."""
-    return monitor.get_report(days=7)
+    """Get 7-day monitoring summary."""
+    try:
+        from src.serving.monitoring import ModelMonitor
+        monitor = ModelMonitor()
+        return monitor.get_report()
+    except Exception as e:
+        return {"error": str(e), "status": "monitoring_unavailable"}
 
-@app.get("/health")
-async def health():
-    """Check if models are still good."""
-    report = monitor.get_report(days=1)
 
-    if report.get("coverage", {}).get("latest", 0) < 0.75:
-        return {"status": "degraded", "reason": "Coverage < 75%"}
-
-    return {"status": "healthy"}
-
-if __name__ == "__main__":
-    debug_mode = ENVIRONMENT == "development"
-    uvicorn.run(app, host="0.0.0.0", port=PORT, reload=debug_mode)
+@app.get("/monitoring/health")
+async def monitoring_health():
+    """Quick health check for ops."""
+    try:
+        from src.serving.monitoring import ModelMonitor
+        monitor = ModelMonitor()
+        return monitor.health_check()
+    except Exception as e:
+        return {"error": str(e), "healthy": False}
